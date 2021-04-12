@@ -1,0 +1,82 @@
+units           metal
+boundary        p p p
+atom_style      atomic
+
+read_data	../../npt.data
+
+mass            1  63.546
+mass            2  91.224 
+
+pair_style      eam/fs
+pair_coeff	* * Cu-Zr_2.eam.fs Cu Zr
+
+change_box	all triclinic
+
+timestep        0.002
+##velocity        all create 50.0 123045
+#fix             1 all npt temp 50.0 50.0 0.1 iso 0.0 0.0 0.5
+
+fix 		2 all nvt temp 400 400 0.5 
+run		100000
+unfix		2
+
+variable tmp1 equal "lx"
+variable tmp2 equal "ly"
+variable tmp3 equal "lz"
+
+variable L1 equal ${tmp1}
+variable L2 equal ${tmp2}
+variable L3 equal ${tmp3}
+
+print "Initial Lx: ${L1}"
+print "Initial Ly: ${L2}"
+print "Initial Lz: ${L3}"
+
+variable tmp4 equal "xy"
+
+group           1 type 1
+group           2 type 2
+
+compute		1 1 stress/atom NULL
+compute		2 2 stress/atom NULL
+
+compute 	s1sum all reduce sum c_1[4]
+compute 	s2sum all reduce sum c_2[4]
+
+compute		5 all msd 
+	
+fix 		1 all deform 1 xy wiggle 0.6 3 units box 
+fix 		2 all nvt temp 400.0 400.0 0.2 
+
+variable s1 equal "(lx - v_L1)/v_L1"
+variable s2 equal "(ly - v_L2)/v_L2"
+variable s3 equal "(lz - v_L3)/v_L3"
+
+variable p2 equal "-pxx"
+variable p3 equal "-pyy"
+variable p4 equal "-pzz"
+variable p5 equal "lx"
+variable p6 equal "ly"
+variable p7 equal "lz"
+variable p8 equal "-pxy"
+variable p9 equal "-pxz"
+variable p10 equal "-pyz"
+
+variable s4 equal "xy"
+
+fix def_print all print 10 "${s1} ${s2} ${s3} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8} ${p9} ${p10} ${s4}" file deform_2.txt screen no
+
+compute         allke all ke/atom
+compute         allpe all pe/atom
+compute         stress all stress/atom NULL
+
+dump            MyDump all custom 5000 dump_shear.atom.* id type x y z c_allpe c_allke c_stress[1] c_stress[2] c_stress[3] c_stress[4] c_stress[5] c_stress[6]
+
+thermo_style    custom step temp pe etotal press vol enthalpy xy xz yz c_s1sum c_s2sum c_5[4] cpu cpuremain
+thermo		50
+
+restart         20000 semi.restart     
+
+run 		60000
+
+write_data      sheared.data
